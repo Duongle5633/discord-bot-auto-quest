@@ -16,33 +16,47 @@ echo -e "${CYAN}================================================================
 echo -e "${CYAN}       AUTO SETUP DISCORD TOOL / TREO VOICE 24/7 TRÊN VPS LINUX       ${NC}"
 echo -e "${CYAN}======================================================================${NC}"
 
+# Xác định quyền root / sudo an toàn
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+    if command -v sudo &>/dev/null; then
+        SUDO="sudo"
+    else
+        echo -e "${RED}Vui lòng chạy script dưới quyền root hoặc cài đặt sudo!${NC}"
+        exit 1
+    fi
+fi
+
 # 1. Cập nhật hệ thống và kiểm tra phiên bản Python
 echo -e "\n${YELLOW}[1/4] Đang cập nhật hệ thống và kiểm tra phiên bản Python...${NC}"
 PYTHON_CMD="python3"
 
 if command -v apt-get &>/dev/null; then
-    sudo apt-get update -y
-    sudo apt-get install -y python3 python3-pip python3-venv git tmux curl build-essential libffi-dev software-properties-common
+    export DEBIAN_FRONTEND=noninteractive
+    $SUDO apt-get update -y
+    $SUDO apt-get install -y python3 python3-pip python3-venv git tmux curl build-essential libffi-dev software-properties-common
 
     # Kiểm tra phiên bản Python hiện tại
     PY_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)" 2>/dev/null || echo 0)
     PY_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)" 2>/dev/null || echo 0)
 
-    # Discord Voice mới nhất bắt buộc giao thức DAVE (yêu cầu discord.py-self 2.1.0+ và Python >= 3.10)
+    # Discord Voice bắt buộc giao thức DAVE mới (yêu cầu discord.py-self 2.1.0+ và Python >= 3.10)
     if [ "$PY_MAJOR" -lt 3 ] || ([ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]); then
-        echo -e "${YELLOW}Phát hiện Python $PY_MAJOR.$PY_MINOR cũ. Đang tự động nâng cấp lên Python 3.11 để hỗ trợ Discord Voice mới nhất...${NC}"
-        sudo add-apt-repository -y ppa:deadsnakes/ppa
-        sudo apt-get update -y
-        sudo apt-get install -y python3.11 python3.11-venv python3.11-dev
+        echo -e "${YELLOW}Phát hiện Python $PY_MAJOR.$PY_MINOR cũ. Đang tự động nâng cấp lên Python 3.11...${NC}"
+        $SUDO add-apt-repository -y ppa:deadsnakes/ppa
+        $SUDO apt-get update -y
+        $SUDO apt-get install -y python3.11 python3.11-venv python3.11-dev
         PYTHON_CMD="python3.11"
     else
         PYTHON_CMD="python3"
     fi
 elif command -v yum &>/dev/null; then
-    sudo yum update -y
-    sudo yum install -y python3 python3-pip git tmux curl gcc libffi-devel
+    $SUDO yum update -y
+    $SUDO yum install -y python3 python3-pip git tmux curl gcc libffi-devel
     PYTHON_CMD="python3"
 fi
+
+echo -e "${GREEN}Sử dụng trình thông dịch: $PYTHON_CMD ($($PYTHON_CMD --version))${NC}"
 
 # 2. Chuẩn bị thư mục mã nguồn
 echo -e "\n${YELLOW}[2/4] Kiểm tra mã nguồn...${NC}"
@@ -51,7 +65,8 @@ REPO_DIR="$HOME/discord-bot-auto-quest"
 if [ -d "$REPO_DIR/.git" ]; then
     echo -e "${GREEN}Đã tìm thấy thư mục repository, tiến hành kéo cập nhật mới nhất...${NC}"
     cd "$REPO_DIR"
-    git pull origin main
+    git fetch origin
+    git reset --hard origin/main
 else
     echo -e "${GREEN}Đang clone mã nguồn từ GitHub về $REPO_DIR...${NC}"
     git clone https://github.com/Mhna3112/discord-bot-auto-quest.git "$REPO_DIR"
@@ -61,11 +76,11 @@ fi
 # 3. Tạo môi trường ảo Python (Virtualenv) & Cài đặt thư viện
 echo -e "\n${YELLOW}[3/4] Cài đặt môi trường Python ảo và các thư viện...${NC}"
 
-# Nếu môi trường venv cũ sử dụng Python < 3.10, xóa đi để tạo mới bằng Python 3.11
+# Luôn làm mới venv nếu venv dùng Python < 3.10
 if [ -d "venv" ]; then
     VENV_PY_MINOR=$(./venv/bin/python3 -c "import sys; print(sys.version_info.minor)" 2>/dev/null || echo 0)
     if [ "$VENV_PY_MINOR" -lt 10 ]; then
-        echo -e "${YELLOW}Làm mới môi trường ảo sang $PYTHON_CMD...${NC}"
+        echo -e "${YELLOW}Xóa môi trường ảo Python cũ ($VENV_PY_MINOR) để tạo mới bằng $PYTHON_CMD...${NC}"
         rm -rf venv
     fi
 fi
@@ -74,9 +89,8 @@ if [ ! -d "venv" ]; then
     $PYTHON_CMD -m venv venv
 fi
 
-source venv/bin/activate
-pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+./venv/bin/pip install --upgrade pip setuptools wheel
+./venv/bin/pip install -r requirements.txt
 
 # 4. Hoàn tất cài đặt
 echo -e "\n${GREEN}======================================================================${NC}"
@@ -95,5 +109,5 @@ echo -e "======================================================================\
 # Hỏi người dùng có muốn chạy tool luôn không
 read -p "👉 Bạn có muốn chạy tool Treo Voice ngay bây giờ không? (y/n): " RUN_NOW
 if [[ "$RUN_NOW" =~ ^[Yy]$ ]]; then
-    python treo_voice.py
+    ./venv/bin/python treo_voice.py
 fi
