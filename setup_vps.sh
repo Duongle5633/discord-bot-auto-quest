@@ -16,14 +16,32 @@ echo -e "${CYAN}================================================================
 echo -e "${CYAN}       AUTO SETUP DISCORD TOOL / TREO VOICE 24/7 TRÊN VPS LINUX       ${NC}"
 echo -e "${CYAN}======================================================================${NC}"
 
-# 1. Cập nhật hệ thống và cài đặt gói phụ thuộc
-echo -e "\n${YELLOW}[1/4] Đang cập nhật hệ thống và cài đặt gói hệ thống...${NC}"
+# 1. Cập nhật hệ thống và kiểm tra phiên bản Python
+echo -e "\n${YELLOW}[1/4] Đang cập nhật hệ thống và kiểm tra phiên bản Python...${NC}"
+PYTHON_CMD="python3"
+
 if command -v apt-get &>/dev/null; then
     sudo apt-get update -y
-    sudo apt-get install -y python3 python3-pip python3-venv git tmux curl build-essential libffi-dev
+    sudo apt-get install -y python3 python3-pip python3-venv git tmux curl build-essential libffi-dev software-properties-common
+
+    # Kiểm tra phiên bản Python hiện tại
+    PY_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)" 2>/dev/null || echo 0)
+    PY_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)" 2>/dev/null || echo 0)
+
+    # Discord Voice mới nhất bắt buộc giao thức DAVE (yêu cầu discord.py-self 2.1.0+ và Python >= 3.10)
+    if [ "$PY_MAJOR" -lt 3 ] || ([ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]); then
+        echo -e "${YELLOW}Phát hiện Python $PY_MAJOR.$PY_MINOR cũ. Đang tự động nâng cấp lên Python 3.11 để hỗ trợ Discord Voice mới nhất...${NC}"
+        sudo add-apt-repository -y ppa:deadsnakes/ppa
+        sudo apt-get update -y
+        sudo apt-get install -y python3.11 python3.11-venv python3.11-dev
+        PYTHON_CMD="python3.11"
+    else
+        PYTHON_CMD="python3"
+    fi
 elif command -v yum &>/dev/null; then
     sudo yum update -y
     sudo yum install -y python3 python3-pip git tmux curl gcc libffi-devel
+    PYTHON_CMD="python3"
 fi
 
 # 2. Chuẩn bị thư mục mã nguồn
@@ -42,12 +60,22 @@ fi
 
 # 3. Tạo môi trường ảo Python (Virtualenv) & Cài đặt thư viện
 echo -e "\n${YELLOW}[3/4] Cài đặt môi trường Python ảo và các thư viện...${NC}"
+
+# Nếu môi trường venv cũ sử dụng Python < 3.10, xóa đi để tạo mới bằng Python 3.11
+if [ -d "venv" ]; then
+    VENV_PY_MINOR=$(./venv/bin/python3 -c "import sys; print(sys.version_info.minor)" 2>/dev/null || echo 0)
+    if [ "$VENV_PY_MINOR" -lt 10 ]; then
+        echo -e "${YELLOW}Làm mới môi trường ảo sang $PYTHON_CMD...${NC}"
+        rm -rf venv
+    fi
+fi
+
 if [ ! -d "venv" ]; then
-    python3 -m venv venv
+    $PYTHON_CMD -m venv venv
 fi
 
 source venv/bin/activate
-pip install --upgrade pip
+pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 
 # 4. Hoàn tất cài đặt
@@ -56,6 +84,7 @@ echo -e "${GREEN}                   CÀI ĐẶT THÀNH CÔNG TRÊN VPS!         
 echo -e "${GREEN}======================================================================${NC}"
 echo -e "\n${CYAN}Để treo voice 24/7 không bị tắt khi bạn đóng Termius, hãy chạy:${NC}"
 echo -e "  ${YELLOW}tmux new -s voice${NC}             # Mở cửa sổ chạy ngầm tmux"
+echo -e "  ${YELLOW}cd ~/discord-bot-auto-quest${NC}   # Vào thư mục bot"
 echo -e "  ${YELLOW}source venv/bin/activate${NC}      # Kích hoạt môi trường Python"
 echo -e "  ${YELLOW}python treo_voice.py${NC}          # Khởi động tool treo voice"
 echo -e "\n${CYAN}Các phím tắt quan trọng trong tmux:${NC}"

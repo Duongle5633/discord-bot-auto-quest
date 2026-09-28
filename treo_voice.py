@@ -182,6 +182,7 @@ class VoiceHanger:
         self.target_channel: Optional[discord.VoiceChannel] = None
         self.start_time: Optional[float] = None
         self.is_connected = False
+        self.is_reconnecting = False
         self.is_shutting_down = False
         self.reconnect_cooldown = 5
         self.last_move_time = 0
@@ -221,37 +222,26 @@ class VoiceHanger:
             if self.is_shutting_down:
                 return
 
+            # Chỉ xử lý ngắt kết nối sau khi đã kết nối thành công trước đó
+            if not self.is_connected:
+                return
+
             # Trường hợp 1: Bị ngắt kết nối (kick ra khỏi voice hoặc mất mạng)
-            if after.channel is None:
+            if before.channel is not None and after.channel is None:
                 self.is_connected = False
                 log(f"Tài khoản bị ngắt kết nối khỏi kênh voice!", "warn")
-                if self.auto_reconnect and not self.is_shutting_down:
-                    log(f"Đang tự động kết nối lại sau {self.reconnect_cooldown} giây...", "info")
-                    await asyncio.sleep(self.reconnect_cooldown)
-                    await self.reconnect_to_target()
+                if self.auto_reconnect and not self.is_shutting_down and not self.is_reconnecting:
+                    asyncio.create_task(self.delayed_reconnect())
 
             # Trường hợp 2: Bị chuyển sang kênh khác (ví dụ: kênh AFK hoặc phòng khác)
-            elif self.target_channel and after.channel.id != self.target_channel.id:
+            elif self.target_channel and after.channel and after.channel.id != self.target_channel.id:
                 now = time.time()
                 log(f"Phát hiện bị di chuyển sang kênh khác: {Fore.YELLOW}{after.channel.name}{Style.RESET_ALL}", "warn")
                 
                 # Tránh lặp vô tận nếu bị di chuyển liên tục
-                if now - self.last_move_time > 5 and self.auto_reconnect:
+                if now - self.last_move_time > 5 and self.auto_reconnect and not self.is_reconnecting:
                     self.last_move_time = now
-                    log(f"Đang tự động chuyển về kênh mục tiêu: {Fore.CYAN}{self.target_channel.name}{Style.RESET_ALL}...", "info")
-                    await asyncio.sleep(2)
-                    try:
-                        guild = self.client.get_guild(self.guild_id)
-                        if guild:
-                            await guild.change_voice_state(
-                                channel=self.target_channel,
-                                self_mute=self.self_mute,
-                                self_deaf=self.self_deaf,
-                                self_video=self.self_video
-                            )
-                    except Exception as e:
-                        log(f"Lỗi khi di chuyển về kênh: {e}. Đang thử kết nối lại...", "warn")
-                        await self.reconnect_to_target()
+                    asyncio.create_task(self.move_back_to_target())
 
     async def resolve_channel_by_id(self, channel_id: int) -> Optional[discord.VoiceChannel]:
         """Tìm kênh voice theo ID (thông qua cache hoặc gọi fetch_channel trực tiếp)."""
@@ -493,17 +483,38 @@ class VoiceHanger:
         except Exception as e:
             self.is_connected = False
             log(f"Lỗi khi kết nối vào kênh voice: {e}", "err")
-            if self.auto_reconnect and not self.is_shutting_down:
-                log(f"Sẽ thử lại sau {self.reconnect_cooldown} giây...", "warn")
-                await asyncio.sleep(self.reconnect_cooldown)
-                await self.reconnect_to_target()
+            if self.auto_reconnect and not self.is_shutting_down and not self.is_reconnecting:
+                asyncio.create_task(self.delayed_reconnect())
 
-    async def reconnect_to_target(self):
-        """Thực hiện kết nối lại."""
-        if self.is_shutting_down:
+    async def delayed_reconnect(self):
+        """Kết nối lại có độ trễ để tránh xung đột với Discord Gateway."""
+        if self.is_reconnecting or self.is_shutting_down:
             return
-        log("Đang tiến hành kết nối lại vào kênh voice...", "info")
-        await self.connect_to_target()
+        self.is_reconnecting = True
+        try:
+            log(f"Sẽ thử kết nối lại sau {self.reconnect_cooldown} giây...", "warn")
+            await asyncio.sleep(self.reconnect_cooldown)
+            log("Đang tiến hành kết nối lại vào kênh voice...", "info")
+            await self.connect_to_target()
+        finally:
+            self.is_reconnecting = False
+
+    async def move_back_to_target(self):
+        """Chuyển lại về phòng mục tiêu nếu bị chuyển sang kênh khác (như kênh AFK)."""
+        log(f"Đang tự động chuyển về kênh mục tiêu: {Fore.CYAN}{self.target_channel.name}{Style.RESET_ALL}...", "info")
+        await asyncio.sleep(2)
+        try:
+            guild = self.client.get_guild(self.guild_id)
+            if guild:
+                await guild.change_voice_state(
+                    channel=self.target_channel,
+                    self_mute=self.self_mute,
+                    self_deaf=self.self_deaf,
+                    self_video=self.self_video
+                )
+        except Exception as e:
+            log(f"Lỗi khi di chuyển về kênh: {e}. Đang thử kết nối lại...", "warn")
+            await self.connect_to_target()
 
     async def uptime_monitor_loop(self):
         """Vòng lặp hiển thị thời gian đã treo và giám sát kết nối theo chu kỳ."""
