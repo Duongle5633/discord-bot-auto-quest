@@ -20,10 +20,10 @@ echo -e "${CYAN}================================================================
 echo -e "\n${YELLOW}[1/4] Đang cập nhật hệ thống và cài đặt gói hệ thống...${NC}"
 if command -v apt-get &>/dev/null; then
     sudo apt-get update -y
-    sudo apt-get install -y python3 python3-pip python3-venv git tmux curl
+    sudo apt-get install -y python3 python3-pip python3-venv git tmux curl build-essential libffi-dev
 elif command -v yum &>/dev/null; then
     sudo yum update -y
-    sudo yum install -y python3 python3-pip git tmux curl
+    sudo yum install -y python3 python3-pip git tmux curl gcc libffi-devel
 fi
 
 # 2. Chuẩn bị thư mục mã nguồn
