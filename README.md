@@ -91,3 +91,18 @@ Tất cả kết quả của các lệnh này đều trả về dưới dạng *
 - `/stop` - Dừng quá trình quét quest tự động.
 - `/check` - Thực hiện quét và làm quest lập tức một lần thủ công.
 - `/logout` - Đăng xuất, hủy tiến trình chạy ngầm và xóa token của bạn khỏi hệ thống.
+
+---
+
+## Tính Năng Phụ: Tool Treo Voice 24/7 (`treo_voice.py`)
+
+Bên cạnh việc làm nhiệm vụ tự động, dự án đi kèm một script độc lập để treo tài khoản trong Kênh Voice 24/7 (Anti-Kick, Auto-Reconnect, Tự tắt Mic/Tai nghe):
+
+```bash
+python treo_voice.py
+```
+Hoặc vào thẳng bằng 1 dòng lệnh:
+```bash
+python treo_voice.py --token "TOKEN_CỦA_BẠN" --channel ID_KÊNH_VOICE
+```
+👉 Xem chi tiết tại [Hướng Dẫn Treo Voice](HUONG_DAN_TREO_VOICE.md).
